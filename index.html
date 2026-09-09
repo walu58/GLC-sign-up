@@ -1,126 +1,754 @@
-/**
- * Global Language Center — Meeting Sign-up
- * Google Apps Script backend (stores every sign-up in a Google Sheet).
- *
- * Setup: see README.md. Change ADMIN_PASSCODE before deploying.
- */
-
-const ADMIN_PASSCODE = 'glcc2026';
-const SLOT_CAPACITY  = 1;           // must match SLOT_CAPACITY in index.html
-const SHEET_NAME     = 'signups';
-
-function sheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sh = ss.getSheetByName(SHEET_NAME);
-  if (!sh) {
-    sh = ss.insertSheet(SHEET_NAME);
-    sh.appendRow(['id', 'lang', 'date', 'time', 'name', 'email', 'note', 'createdAt']);
-    sh.setFrozenRows(1);
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Global Language Center — Meeting Sign-up</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+<style>
+  :root{
+    --ink:#1B1035;
+    --violet:#5B2D8E;
+    --violet-soft:#F1EAFA;
+    --violet-line:#DCCDF0;
+    --teal:#0E9A9A;
+    --teal-soft:#E4F5F4;
+    --paper:#FBFAFD;
+    --line:#E6E1EE;
+    --muted:#6E6683;
+    --shadow:0 10px 30px -18px rgba(27,16,53,.45);
+    --radius:10px;
   }
-  return sh;
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Pretendard',system-ui,-apple-system,'Segoe UI',sans-serif;
+    font-size:15px;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--violet)}
+  button{font-family:inherit}
+
+  /* ---------- header ---------- */
+  header{
+    background:linear-gradient(103deg,var(--ink) 0%,#3A1D64 48%,#0E5F70 100%);
+    color:#fff;
+    padding:34px 22px 26px;
+  }
+  .wrap{max-width:1080px;margin:0 auto}
+  .brand{font-size:12.5px;letter-spacing:.09em;color:#C9B9E8;margin-bottom:6px}
+  h1{
+    margin:0;
+    font-size:clamp(24px,4.4vw,36px);
+    font-weight:700;
+    letter-spacing:-.02em;
+  }
+  .lede{margin:10px 0 0;max-width:56ch;color:#DCD3EE;font-size:14.5px}
+
+  /* ---------- tabs ---------- */
+  nav.tabs{
+    background:#fff;border-bottom:1px solid var(--line);
+    position:sticky;top:0;z-index:20;
+  }
+  nav.tabs .wrap{display:flex;gap:4px;align-items:center;overflow-x:auto}
+  .tab{
+    border:0;background:none;padding:15px 14px;cursor:pointer;
+    color:var(--muted);font-size:14.5px;font-weight:600;white-space:nowrap;
+    border-bottom:2.5px solid transparent;
+  }
+  .tab[aria-selected="true"]{color:var(--violet);border-bottom-color:var(--violet)}
+  .tab:focus-visible{outline:2px solid var(--teal);outline-offset:-4px}
+  .tab.right{margin-left:auto;color:#8C84A0;font-weight:500}
+
+  main{padding:24px 22px 80px}
+
+  /* ---------- week bar ---------- */
+  .weekbar{
+    display:flex;align-items:center;gap:12px;margin-bottom:22px;
+    background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+    padding:10px 12px;
+  }
+  .weekbar .label{font-weight:600;font-size:15px}
+  .weekbar .sub{color:var(--muted);font-size:13px}
+  .arrow{
+    width:34px;height:34px;border-radius:8px;border:1px solid var(--line);
+    background:#fff;color:var(--ink);cursor:pointer;font-size:16px;line-height:1;
+  }
+  .arrow:disabled{opacity:.35;cursor:not-allowed}
+  .arrow:hover:not(:disabled){background:var(--violet-soft);border-color:var(--violet-line)}
+  .weekbar .spacer{flex:1}
+
+  /* ---------- day board ---------- */
+  .board{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}
+  .day{
+    background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+    overflow:hidden;box-shadow:var(--shadow);
+  }
+  .day > h3{
+    margin:0;padding:12px 14px;font-size:14.5px;font-weight:700;
+    border-bottom:1px solid var(--line);
+    display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+  }
+  .day > h3 .date{font-weight:500;color:var(--muted);font-size:13px}
+  .slots{padding:10px;display:flex;flex-direction:column;gap:6px}
+  .slot{
+    display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+    padding:9px 11px;border-radius:8px;cursor:pointer;font-size:14px;
+    border:1px solid var(--violet-line);background:#fff;color:var(--ink);
+  }
+  .slot .time{font-variant-numeric:tabular-nums;font-weight:600}
+  .slot .state{margin-left:auto;font-size:12.5px;color:var(--teal);font-weight:600}
+  .slot:hover:not(:disabled){background:var(--violet-soft)}
+  .slot:focus-visible{outline:2px solid var(--violet);outline-offset:1px}
+  .slot:disabled{cursor:not-allowed;border-color:var(--line);background:#F6F5F8;color:#9A93AB}
+  .slot:disabled .state{color:#9A93AB;font-weight:500}
+  .slot.mine{border-color:var(--teal);background:var(--teal-soft)}
+
+  .notice{
+    background:#FFF4E5;border:1px solid #F0D3A4;border-left:4px solid #C97A16;
+    border-radius:var(--radius);padding:13px 16px;margin-bottom:18px;font-size:14px;color:#6B4508;
+  }
+  .notice strong{display:block;margin-bottom:2px}
+  .empty{
+    background:#fff;border:1px dashed var(--violet-line);border-radius:var(--radius);
+    padding:34px 22px;text-align:center;color:var(--muted);
+  }
+  .empty strong{display:block;color:var(--ink);margin-bottom:4px;font-size:16px}
+
+  /* ---------- modal ---------- */
+  .backdrop{
+    position:fixed;inset:0;background:rgba(27,16,53,.5);
+    display:none;align-items:center;justify-content:center;padding:18px;z-index:50;
+  }
+  .backdrop.open{display:flex}
+  .modal{
+    background:#fff;border-radius:14px;width:100%;max-width:430px;
+    padding:22px;box-shadow:0 30px 70px -20px rgba(27,16,53,.6);
+  }
+  .modal h2{margin:0 0 4px;font-size:19px}
+  .modal .when{color:var(--muted);font-size:14px;margin:0 0 18px}
+  label{display:block;font-size:13.5px;font-weight:600;margin:14px 0 5px}
+  input[type=text],input[type=email],textarea{
+    width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:8px;
+    font-family:inherit;font-size:14.5px;color:var(--ink);background:#fff;
+  }
+  input:focus,textarea:focus{outline:2px solid var(--violet);outline-offset:-1px;border-color:var(--violet)}
+  textarea{resize:vertical;min-height:74px}
+  .count{text-align:right;font-size:12.5px;color:var(--muted);margin-top:4px}
+  .count.over{color:#B3261E;font-weight:600}
+  .actions{display:flex;gap:8px;margin-top:20px}
+  .btn{
+    flex:1;padding:11px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;
+    border:1px solid var(--line);background:#fff;color:var(--ink);
+  }
+  .btn.primary{background:var(--violet);border-color:var(--violet);color:#fff}
+  .btn.primary:disabled{opacity:.5;cursor:not-allowed}
+  .btn:hover:not(:disabled){filter:brightness(.97)}
+  .msg{margin-top:12px;font-size:13.5px;color:#B3261E;min-height:1em}
+
+  /* ---------- toast ---------- */
+  .toast{
+    position:fixed;left:50%;bottom:26px;transform:translate(-50%,14px);
+    background:var(--ink);color:#fff;padding:12px 18px;border-radius:999px;
+    font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:60;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+
+  /* ---------- admin ---------- */
+  .gate{max-width:360px;margin:40px auto;background:#fff;border:1px solid var(--line);
+        border-radius:var(--radius);padding:24px;box-shadow:var(--shadow)}
+  .gate h2{margin:0 0 6px;font-size:18px}
+  .gate p{margin:0;color:var(--muted);font-size:14px}
+  .adminbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+  select{padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font-family:inherit;font-size:14px}
+  .tablewrap{background:#fff;border:1px solid var(--line);border-radius:var(--radius);overflow:auto}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:720px}
+  th,td{padding:11px 13px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#F7F5FB;font-size:12.5px;color:var(--muted);font-weight:600;position:sticky;top:0}
+  tbody tr:last-child td{border-bottom:0}
+  td.note{color:var(--muted);max-width:280px}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;
+        background:var(--violet-soft);color:var(--violet)}
+  .del{border:0;background:none;color:#B3261E;cursor:pointer;font-size:13px;padding:2px 4px}
+  .count-line{color:var(--muted);font-size:13.5px;margin:0 0 14px}
+
+  footer{border-top:1px solid var(--line);padding:22px;color:var(--muted);font-size:13px;background:#fff}
+  .hidden{display:none !important}
+  @media (prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="brand">Taejae University · Global Language Center</p>
+    <h1>Global Language Center — Meeting Sign-up</h1>
+    <p class="lede">Book a 30-minute meeting with a language instructor. Choose a language, pick an open time, and tell us briefly what you would like to discuss.</p>
+  </div>
+</header>
+
+<nav class="tabs">
+  <div class="wrap" id="tabs" role="tablist"></div>
+</nav>
+
+<main class="wrap">
+  <!-- booking view -->
+  <section id="bookView">
+    <div class="weekbar">
+      <button class="arrow" id="prevWeek" aria-label="Previous week">‹</button>
+      <div>
+        <div class="label" id="weekLabel">—</div>
+        <div class="sub" id="weekSub"></div>
+      </div>
+      <div class="spacer"></div>
+      <button class="arrow" id="nextWeek" aria-label="Next week">›</button>
+    </div>
+    <div id="board" class="board"></div>
+  </section>
+
+  <!-- admin view -->
+  <section id="adminView" class="hidden">
+    <div id="gate" class="gate">
+      <h2>Administrator access</h2>
+      <p>Enter the passcode to view sign-ups.</p>
+      <label for="pass">Passcode</label>
+      <input type="text" id="pass" autocomplete="off" />
+      <div class="actions"><button class="btn primary" id="gateBtn">Open</button></div>
+      <div class="msg" id="gateMsg"></div>
+    </div>
+
+    <div id="adminPanel" class="hidden">
+      <div class="adminbar">
+        <select id="fLang"><option value="">All languages</option></select>
+        <select id="fWeek">
+          <option value="upcoming">Upcoming only</option>
+          <option value="all">All dates</option>
+        </select>
+        <div class="spacer" style="flex:1"></div>
+        <button class="btn" style="flex:0 0 auto;padding:9px 14px" id="refresh">Refresh</button>
+        <button class="btn" style="flex:0 0 auto;padding:9px 14px" id="csv">Download CSV</button>
+      </div>
+      <p class="count-line" id="adminCount"></p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr>
+            <th>Language</th><th>Date</th><th>Time</th><th>Student</th><th>Email</th><th>What to discuss</th><th></th>
+          </tr></thead>
+          <tbody id="adminRows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  Questions about a booking? Contact the Global Language Center. Bookings are held for the student named on the slot.
+</footer>
+
+<!-- booking modal -->
+<div class="backdrop" id="backdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <h2 id="mTitle">Book this time</h2>
+    <p class="when" id="mWhen"></p>
+
+    <label for="fName">Your name</label>
+    <input type="text" id="fName" autocomplete="name" placeholder="e.g. Minji Kim" />
+
+    <label for="fEmail">Taejae email</label>
+    <input type="email" id="fEmail" autocomplete="email" placeholder="you@taejae.ac.kr" />
+
+    <label for="fNote">What would you like to discuss?</label>
+    <textarea id="fNote" maxlength="100" placeholder="A short summary — up to 100 characters."></textarea>
+    <div class="count" id="noteCount">0 / 100</div>
+
+    <div class="actions">
+      <button class="btn" id="cancelBtn">Cancel</button>
+      <button class="btn primary" id="bookBtn">Book meeting</button>
+    </div>
+    <div class="msg" id="mMsg"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =====================================================================
+   1. SETTINGS — edit these three things and nothing else.
+   ===================================================================== */
+
+// Paste the Google Apps Script Web App URL here (see README).
+// Leave it empty ("") to run the page in demo mode: everything works,
+// but bookings disappear when the page is reloaded.
+const API_URL = "https://script.google.com/macros/s/AKfycbyVdxosa5tTjcfRiLf2KvuSKwJ9g_Pm0gh2FoJmfv6OzP-H3xBsc6wGSCp12zJwKdSNww/exec";
+
+// Passcode for the Admin tab. When API_URL is set, the real check happens
+// on the server; this value is only used in demo mode.
+const ADMIN_PASSCODE = "glcc2026";
+
+// Length of one meeting, in minutes.
+const SLOT_MINUTES = 30;
+
+// How many students may book the same time slot.
+// 1 = one-on-one. Raise it if a slot can hold a small group.
+const SLOT_CAPACITY = 1;
+
+// Office hours. Add or remove ranges freely; an empty list = no hours that day.
+const SCHEDULE = {
+  Korean: {
+    mon: [["10:00","12:00"],["14:00","20:00"]],
+    tue: [],
+    wed: [["10:00","12:00"],["14:00","15:00"]],
+    thu: [],
+    fri: [["19:00","21:00"]]
+  },
+  Russian: {
+    mon: [], tue: [], wed: [], thu: [], fri: [],
+    _note: "Office hours for Russian will be announced soon."
+  },
+  Chinese: {
+    mon: [], tue: [], wed: [], thu: [],
+    fri: [["09:00","12:00"]]
+  },
+  Japanese: {
+    mon: [["15:00","17:00"]],
+    tue: [["14:00","16:00"]],
+    wed: [["15:00","17:00"]],
+    thu: [["10:00","16:00"]],
+    fri: []
+  }
+};
+
+/* =====================================================================
+   2. Application
+   ===================================================================== */
+
+const DAYS = [
+  {key:"mon", label:"Monday",    offset:0},
+  {key:"tue", label:"Tuesday",   offset:1},
+  {key:"wed", label:"Wednesday", offset:2},
+  {key:"thu", label:"Thursday",  offset:3},
+  {key:"fri", label:"Friday",    offset:4}
+];
+const LANGS = Object.keys(SCHEDULE);
+const WEEKS_AHEAD = 3;
+
+const state = {
+  lang: LANGS[0],
+  week: 0,            // 0 = current week
+  view: "book",
+  bookings: [],       // [{id, lang, date, time, name, email, note}]
+  loaded: false,
+  online: false,
+  lastError: "",
+  pending: null,
+  adminKey: null
+};
+
+/* ---------- date helpers ---------- */
+function mondayOf(weekOffset){
+  const d = new Date();
+  d.setHours(0,0,0,0);
+  const shift = (d.getDay() + 6) % 7;      // Sunday = 6
+  d.setDate(d.getDate() - shift + weekOffset * 7);
+  return d;
+}
+function dateOf(weekOffset, dayOffset){
+  const d = mondayOf(weekOffset);
+  d.setDate(d.getDate() + dayOffset);
+  return d;
+}
+const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const pretty = d => d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+const longDate = d => d.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
+function isPast(dateStr, time){
+  return new Date(`${dateStr}T${time}:00`) < new Date();
+}
+function expand(range){
+  const [s,e] = range;
+  const out = [];
+  let [h,m] = s.split(":").map(Number);
+  const [eh,em] = e.split(":").map(Number);
+  while (h*60 + m + SLOT_MINUTES <= eh*60 + em){
+    out.push(`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`);
+    m += SLOT_MINUTES;
+    h += Math.floor(m/60); m %= 60;
+  }
+  return out;
 }
 
-function rows_() {
-  const values = sheet_().getDataRange().getValues();
-  return values.slice(1).filter(function (r) { return r[0]; }).map(function (r) {
-    return {
-      id:    String(r[0]),
-      lang:  String(r[1]),
-      date:  formatDate_(r[2]),
-      time:  formatTime_(r[3]),
-      name:  String(r[4]),
-      email: String(r[5]),
-      note:  String(r[6])
+/* ---------- data access ----------
+   Apps Script and GitHub Pages sit on different domains, and Apps Script
+   answers every request with a redirect. A plain fetch() often fails that
+   trip. JSONP (loading the answer as a script tag) is not affected by
+   either problem, so every call goes through here. */
+function api(params, timeout){
+  return new Promise((resolve, reject) => {
+    if (!API_URL) return reject(new Error("not configured"));
+    const cb = "glc_cb_" + Math.random().toString(36).slice(2,9);
+    const tag = document.createElement("script");
+    let settled = false;
+    const done = () => { settled = true; clearTimeout(timer); delete window[cb]; tag.remove(); };
+    const timer = setTimeout(() => {
+      if (!settled){ done(); reject(new Error("The sign-up sheet did not answer in time.")); }
+    }, timeout || 20000);
+
+    window[cb] = data => {
+      if (settled) return;
+      done();
+      if (data && data.error) reject(new Error(data.error));
+      else resolve(data || {});
     };
+    tag.onerror = () => { if (!settled){ done(); reject(new Error("Could not reach the sign-up sheet.")); } };
+
+    const qs = Object.keys(params)
+      .map(k => encodeURIComponent(k) + "=" + encodeURIComponent(params[k] == null ? "" : params[k]))
+      .join("&");
+    tag.src = API_URL + "?" + qs + "&callback=" + cb;
+    document.body.appendChild(tag);
   });
 }
 
-/** Sheets may turn "2026-09-14" into a Date object; normalise it back. */
-function formatDate_(v) {
-  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-  return String(v);
-}
-function formatTime_(v) {
-  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'HH:mm');
-  return String(v);
-}
-
-function json_(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-/** Public reads: the booking board only needs to know which slots are used. */
-function doGet(e) {
-  const action = (e.parameter.action || 'list');
-
-  if (action === 'admin') {
-    if (e.parameter.key !== ADMIN_PASSCODE) return json_({ error: 'unauthorised' });
-    return json_({ bookings: rows_() });
-  }
-
-  // Public list: names and notes are stripped so students cannot read them.
-  const publicRows = rows_().map(function (b) {
-    return { id: b.id, lang: b.lang, date: b.date, time: b.time, name: '', email: '', note: '' };
-  });
-  return json_({ bookings: publicRows });
-}
-
-function doPost(e) {
-  let body = {};
-  try { body = JSON.parse(e.postData.contents); } catch (err) { return json_({ error: 'bad request' }); }
-
-  if (body.action === 'book')   return book_(body);
-  if (body.action === 'remove') return remove_(body);
-  return json_({ error: 'unknown action' });
-}
-
-function book_(b) {
-  if (!b.lang || !b.date || !b.time || !b.name || !b.email || !b.note) {
-    return json_({ error: 'missing fields' });
-  }
-  const note = String(b.note).slice(0, 100);
-
-  const lock = LockService.getScriptLock();
-  lock.waitLock(10000);
+async function loadBookings(){
+  if (!API_URL){ state.loaded = true; state.online = false; return; }
   try {
-    const used = rows_().filter(function (r) {
-      return r.lang === b.lang && r.date === b.date && r.time === b.time;
-    }).length;
-    if (used >= SLOT_CAPACITY) return json_({ taken: true });
-
-    sheet_().appendRow([
-      b.id || (Date.now() + '-' + Math.random().toString(36).slice(2, 7)),
-      b.lang, "'" + b.date, "'" + b.time, b.name, b.email, note, new Date()
-    ]);
-    notify_(b, note);
-    return json_({ ok: true });
-  } finally {
-    lock.releaseLock();
+    const data = await api({action:"list"});
+    state.bookings = data.bookings || [];
+    state.online = true;
+    state.lastError = "";
+  } catch(e){
+    state.online = false;
+    state.lastError = e.message;
+    console.warn("Sign-up sheet:", e.message);
   }
+  state.loaded = true;
+  showConnectionBanner();
 }
 
-function remove_(b) {
-  if (b.key !== ADMIN_PASSCODE) return json_({ error: 'unauthorised' });
-  const sh = sheet_();
-  const values = sh.getDataRange().getValues();
-  for (let i = values.length - 1; i >= 1; i--) {
-    if (String(values[i][0]) === String(b.id)) { sh.deleteRow(i + 1); return json_({ ok: true }); }
+function showConnectionBanner(){
+  let bar = document.getElementById("connBar");
+  if (state.online || !API_URL){ if (bar) bar.remove(); return; }
+  if (!bar){
+    bar = document.createElement("div");
+    bar.id = "connBar";
+    bar.className = "notice";
+    document.getElementById("bookView").prepend(bar);
   }
-  return json_({ error: 'not found' });
+  bar.innerHTML = `<strong>Sign-ups are not being saved right now.</strong>
+    The page cannot reach the booking sheet, so anything you enter will be lost.
+    Please contact the Global Language Center.`;
 }
 
-/**
- * Optional: email the office whenever a student books.
- * Add an address to turn it on; leave it empty to skip.
- */
-const NOTIFY_TO = '';
+function seatsUsed(lang, date, time){
+  return state.bookings.filter(b => b.lang===lang && b.date===date && b.time===time).length;
+}
+function isFull(lang, date, time){
+  return seatsUsed(lang, date, time) >= SLOT_CAPACITY;
+}
 
-function notify_(b, note) {
-  if (!NOTIFY_TO) return;
-  MailApp.sendEmail({
-    to: NOTIFY_TO,
-    subject: 'GLC sign-up: ' + b.lang + ' ' + b.date + ' ' + b.time,
-    body: b.name + ' (' + b.email + ')\n' + b.lang + ' — ' + b.date + ' ' + b.time + '\n\n' + note
+/* Slots in the current week are often already in the past, which makes the
+   board look fully closed. Jump to the first week that still has room. */
+function weekHasRoom(lang, week){
+  const conf = SCHEDULE[lang] || {};
+  return DAYS.some(day => {
+    const dstr = iso(dateOf(week, day.offset));
+    return (conf[day.key] || []).some(range =>
+      expand(range).some(t => !isPast(dstr, t) && !isFull(lang, dstr, t)));
   });
 }
+function firstOpenWeek(lang){
+  for (let w = 0; w <= WEEKS_AHEAD; w++) if (weekHasRoom(lang, w)) return w;
+  return 0;
+}
+
+/* ---------- tabs ---------- */
+function buildTabs(){
+  const bar = document.getElementById("tabs");
+  bar.innerHTML = "";
+  LANGS.forEach(l => {
+    const b = document.createElement("button");
+    b.className = "tab";
+    b.type = "button";
+    b.role = "tab";
+    b.textContent = l;
+    b.setAttribute("aria-selected", state.view==="book" && state.lang===l);
+    b.onclick = () => {
+      state.lang = l; state.view = "book";
+      if (!weekHasRoom(l, state.week)) state.week = firstOpenWeek(l);
+      render();
+    };
+    bar.appendChild(b);
+  });
+  const a = document.createElement("button");
+  a.className = "tab right";
+  a.type = "button";
+  a.textContent = "Admin";
+  a.setAttribute("aria-selected", state.view==="admin");
+  a.onclick = () => { state.view = "admin"; render(); };
+  bar.appendChild(a);
+}
+
+/* ---------- booking board ---------- */
+function renderBoard(){
+  const mon = mondayOf(state.week), fri = dateOf(state.week,4);
+  document.getElementById("weekLabel").textContent = `${pretty(mon)} – ${pretty(fri)}`;
+  document.getElementById("weekSub").textContent =
+    state.week===0 ? "This week" : state.week===1 ? "Next week" : `In ${state.week} weeks`;
+  document.getElementById("prevWeek").disabled = state.week === 0;
+  document.getElementById("nextWeek").disabled = state.week >= WEEKS_AHEAD;
+
+  const board = document.getElementById("board");
+  board.innerHTML = "";
+  const conf = SCHEDULE[state.lang] || {};
+  const openDays = DAYS.filter(d => (conf[d.key] || []).length);
+
+  if (!openDays.length){
+    board.className = "";
+    board.innerHTML = `<div class="empty"><strong>No office hours posted yet</strong>${
+      conf._note || "Please check back later."}</div>`;
+    return;
+  }
+  board.className = "board";
+
+  openDays.forEach(day => {
+    const date = dateOf(state.week, day.offset);
+    const dstr = iso(date);
+    const card = document.createElement("div");
+    card.className = "day";
+    card.innerHTML = `<h3>${day.label}<span class="date">${pretty(date)}</span></h3>`;
+    const list = document.createElement("div");
+    list.className = "slots";
+
+    conf[day.key].forEach(range => expand(range).forEach(time => {
+      const used = seatsUsed(state.lang, dstr, time);
+      const full = used >= SLOT_CAPACITY;
+      const past = isPast(dstr, time);
+      const btn = document.createElement("button");
+      btn.className = "slot";
+      btn.type = "button";
+      btn.disabled = full || past;
+      const end = (() => {
+        let [h,m] = time.split(":").map(Number);
+        m += SLOT_MINUTES; h += Math.floor(m/60); m %= 60;
+        return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
+      })();
+      const label = past ? "Passed"
+        : full ? (SLOT_CAPACITY > 1 ? "Full" : "Booked")
+        : SLOT_CAPACITY > 1 ? `${SLOT_CAPACITY - used} left` : "Open";
+      btn.innerHTML = `<span class="time">${time}–${end}</span>
+        <span class="state">${label}</span>`;
+      if (!full && !past) btn.onclick = () => openModal(dstr, time, day.label, date);
+      list.appendChild(btn);
+    }));
+
+    card.appendChild(list);
+    board.appendChild(card);
+  });
+}
+
+/* ---------- modal ---------- */
+function openModal(dateStr, time, dayLabel, dateObj){
+  state.pending = {date:dateStr, time, lang:state.lang};
+  document.getElementById("mWhen").textContent =
+    `${state.lang} · ${longDate(dateObj)} at ${time}`;
+  ["fName","fEmail","fNote"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("noteCount").textContent = "0 / 100";
+  document.getElementById("noteCount").className = "count";
+  document.getElementById("mMsg").textContent = "";
+  document.getElementById("backdrop").classList.add("open");
+  document.getElementById("fName").focus();
+}
+function closeModal(){
+  document.getElementById("backdrop").classList.remove("open");
+  state.pending = null;
+}
+function toast(text){
+  const t = document.getElementById("toast");
+  t.textContent = text;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+async function submitBooking(){
+  const name  = document.getElementById("fName").value.trim();
+  const email = document.getElementById("fEmail").value.trim();
+  const note  = document.getElementById("fNote").value.trim();
+  const msg   = document.getElementById("mMsg");
+  const btn   = document.getElementById("bookBtn");
+
+  if (!name){ msg.textContent = "Enter your name to book this time."; return; }
+  if (!email || !/^\S+@\S+\.\S+$/.test(email)){
+    msg.textContent = "Enter a valid email so the instructor can reach you."; return; }
+  if (!note){ msg.textContent = "Add a short line about what you want to discuss."; return; }
+  if (note.length > 100){ msg.textContent = "Keep the summary to 100 characters."; return; }
+
+  const p = state.pending;
+  if (isFull(p.lang, p.date, p.time)){
+    msg.textContent = "This time is already full. Please pick another slot.";
+    renderBoard(); return;
+  }
+
+  const record = {...p, name, email, note, id: Date.now() + "-" + Math.random().toString(36).slice(2,7)};
+  btn.disabled = true; btn.textContent = "Booking…"; msg.textContent = "";
+
+  try {
+    if (API_URL){
+      const res = await api({action:"book", id:record.id, lang:record.lang, date:record.date,
+                             time:record.time, name, email, note});
+      if (res.taken){
+        msg.textContent = "Someone just took this time. Please pick another.";
+        await loadBookings(); renderBoard();
+        btn.disabled = false; btn.textContent = "Book meeting";
+        return;
+      }
+      await loadBookings();
+    } else {
+      state.bookings.push(record);
+    }
+    closeModal();
+    renderBoard();
+    toast("Booked — you will hear from the instructor by email.");
+  } catch(err){
+    msg.textContent = API_URL
+      ? err.message + " Please try again, or contact the Global Language Center."
+      : "Preview mode: bookings are not saved yet. Connect the sign-up sheet to go live.";
+  }
+  btn.disabled = false; btn.textContent = "Book meeting";
+}
+
+/* ---------- admin ---------- */
+function renderAdmin(){
+  const gate  = document.getElementById("gate");
+  const panel = document.getElementById("adminPanel");
+  if (!state.adminKey){ gate.classList.remove("hidden"); panel.classList.add("hidden"); return; }
+  gate.classList.add("hidden"); panel.classList.remove("hidden");
+
+  const sel = document.getElementById("fLang");
+  if (sel.options.length === 1){
+    LANGS.forEach(l => sel.add(new Option(l, l)));
+  }
+  const lang = sel.value;
+  const scope = document.getElementById("fWeek").value;
+  const today = iso(new Date());
+
+  const rows = state.bookings
+    .filter(b => !lang || b.lang === lang)
+    .filter(b => scope === "all" || b.date >= today)
+    .sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
+
+  document.getElementById("adminCount").textContent =
+    `${rows.length} sign-up${rows.length===1?"":"s"}${lang ? " for " + lang : ""}.`;
+
+  const body = document.getElementById("adminRows");
+  body.innerHTML = "";
+  if (!rows.length){
+    body.innerHTML = `<tr><td colspan="7" style="color:var(--muted);padding:26px 13px">No sign-ups in this range yet.</td></tr>`;
+    return;
+  }
+  rows.forEach(b => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><span class="pill">${esc(b.lang)}</span></td>
+      <td>${esc(b.date)}</td>
+      <td style="font-variant-numeric:tabular-nums">${esc(b.time)}</td>
+      <td>${esc(b.name)}</td>
+      <td>${esc(b.email || "")}</td>
+      <td class="note">${esc(b.note || "")}</td>
+      <td><button class="del" data-id="${esc(b.id)}">Remove</button></td>`;
+    body.appendChild(tr);
+  });
+  body.querySelectorAll(".del").forEach(btn => btn.onclick = () => removeBooking(btn.dataset.id));
+}
+function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+async function removeBooking(id){
+  const row = state.bookings.find(b => b.id === id);
+  if (!row) return;
+  if (!confirm(`Remove ${row.name}'s booking on ${row.date} at ${row.time}?`)) return;
+  try {
+    if (API_URL){ await api({action:"remove", id, key: state.adminKey}); await loadBookings(); }
+    else { state.bookings = state.bookings.filter(b => b.id !== id); }
+    renderAdmin(); toast("Booking removed.");
+  } catch(e){ toast("Could not remove that booking."); }
+}
+
+function downloadCSV(){
+  const head = ["Language","Date","Time","Student","Email","What to discuss"];
+  const lines = [head.join(",")].concat(
+    state.bookings
+      .slice().sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))
+      .map(b => [b.lang,b.date,b.time,b.name,b.email,b.note]
+        .map(v => `"${String(v ?? "").replace(/"/g,'""')}"`).join(","))
+  );
+  const blob = new Blob(["\ufeff" + lines.join("\r\n")], {type:"text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `glc-signups-${iso(new Date())}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function unlock(){
+  const val = document.getElementById("pass").value.trim();
+  const msg = document.getElementById("gateMsg");
+  if (!val){ msg.textContent = "Enter the passcode."; return; }
+  try {
+    if (API_URL){
+      const data = await api({action:"admin", key: val});
+      state.bookings = data.bookings || [];
+    } else if (val !== ADMIN_PASSCODE){
+      msg.textContent = "That passcode is not correct."; return;
+    }
+    state.adminKey = val;
+    msg.textContent = "";
+    renderAdmin();
+  } catch(e){
+    msg.textContent = /unauthor/i.test(e.message)
+      ? "That passcode is not correct."
+      : e.message;
+  }
+}
+
+/* ---------- render + wiring ---------- */
+function render(){
+  buildTabs();
+  const book = document.getElementById("bookView");
+  const admin = document.getElementById("adminView");
+  if (state.view === "book"){
+    book.classList.remove("hidden"); admin.classList.add("hidden");
+    renderBoard();
+  } else {
+    book.classList.add("hidden"); admin.classList.remove("hidden");
+    renderAdmin();
+  }
+}
+
+document.getElementById("prevWeek").onclick = () => { if (state.week>0){ state.week--; renderBoard(); } };
+document.getElementById("nextWeek").onclick = () => { if (state.week<WEEKS_AHEAD){ state.week++; renderBoard(); } };
+document.getElementById("cancelBtn").onclick = closeModal;
+document.getElementById("bookBtn").onclick = submitBooking;
+document.getElementById("backdrop").onclick = e => { if (e.target.id === "backdrop") closeModal(); };
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
+document.getElementById("fNote").addEventListener("input", e => {
+  const n = e.target.value.length;
+  const c = document.getElementById("noteCount");
+  c.textContent = `${n} / 100`;
+  c.className = n > 100 ? "count over" : "count";
+});
+document.getElementById("gateBtn").onclick = unlock;
+document.getElementById("pass").addEventListener("keydown", e => { if (e.key === "Enter") unlock(); });
+document.getElementById("fLang").onchange = renderAdmin;
+document.getElementById("fWeek").onchange = renderAdmin;
+document.getElementById("csv").onclick = downloadCSV;
+document.getElementById("refresh").onclick = async () => { await loadBookings(); renderAdmin(); toast("Refreshed."); };
+
+loadBookings().then(() => {
+  state.week = firstOpenWeek(state.lang);
+  render();
+});
+</script>
+</body>
+</html>
