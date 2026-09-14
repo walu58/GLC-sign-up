@@ -186,7 +186,7 @@
   <div class="wrap">
     <p class="brand">Taejae University · Global Language Center</p>
     <h1>Global Language Center — Meeting Sign-up</h1>
-    <p class="lede">Book a 20-minute meeting with a language instructor. Choose a language, pick an open time, and tell us briefly what you would like to discuss.</p>
+    <p class="lede">Book a 20-minute meeting with a language instructor. Choose a language, pick an open time, and tell us briefly what you would like to discuss. Meetings run from <strong>6 October</strong> to <strong>30 October 2026</strong>.</p>
   </div>
 </header>
 
@@ -282,7 +282,7 @@
 // Paste the Google Apps Script Web App URL here (see README).
 // Leave it empty ("") to run the page in demo mode: everything works,
 // but bookings disappear when the page is reloaded.
-const API_URL = "https://script.google.com/macros/s/AKfycbyx1ESFjLJfzbR_1PH5gNcyrIBUBY5ujRffn1vUQElrBxRTk1-TjLdbmxUQJNgReE1WHA/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycby0-Fjt-Uda2UBS7BThvt6iThJjBo_mU_6F-luRAWf3JbjxzTd3JZ4yVAn9so_1IQKzBA/exec";
 
 // Passcode for the Admin tab. When API_URL is set, the real check happens
 // on the server; this value is only used in demo mode.
@@ -295,6 +295,10 @@ const SLOT_MINUTES = 20;
 // 1 = one-on-one. Raise it if a slot can hold a small group.
 const SLOT_CAPACITY = 1;
 
+// The period students may book. Dates outside it are not shown at all.
+const BOOKING_OPENS  = "2026-10-06";
+const BOOKING_CLOSES = "2026-10-30";
+
 // Office hours. Add or remove ranges freely; an empty list = no hours that day.
 const SCHEDULE = {
   Korean: {
@@ -305,8 +309,11 @@ const SCHEDULE = {
     fri: [["19:00","21:00"]]
   },
   Russian: {
-    mon: [], tue: [], wed: [], thu: [], fri: [],
-    _note: "Office hours for Russian will be announced soon."
+    mon: [],
+    tue: [["11:00","22:00"]],
+    wed: [],
+    thu: [["11:00","17:00"]],
+    fri: []
   },
   Chinese: {
     mon: [], tue: [], wed: [], thu: [],
@@ -333,7 +340,20 @@ const DAYS = [
   {key:"fri", label:"Friday",    offset:4}
 ];
 const LANGS = Object.keys(SCHEDULE);
-const WEEKS_AHEAD = 3;
+
+/* Week 0 is the week containing BOOKING_OPENS, and the board never runs past
+   the week containing BOOKING_CLOSES. */
+function mondayOfDate(d){
+  const x = new Date(d.getTime());
+  x.setHours(0,0,0,0);
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));   // Sunday = 6
+  return x;
+}
+const OPEN_DATE   = new Date(BOOKING_OPENS + "T00:00:00");
+const CLOSE_DATE  = new Date(BOOKING_CLOSES + "T23:59:59");
+const FIRST_MONDAY = mondayOfDate(OPEN_DATE);
+const WEEKS_AHEAD = Math.round(
+  (mondayOfDate(CLOSE_DATE) - FIRST_MONDAY) / (7 * 24 * 3600 * 1000));
 
 const state = {
   lang: LANGS[0],
@@ -349,11 +369,12 @@ const state = {
 
 /* ---------- date helpers ---------- */
 function mondayOf(weekOffset){
-  const d = new Date();
-  d.setHours(0,0,0,0);
-  const shift = (d.getDay() + 6) % 7;      // Sunday = 6
-  d.setDate(d.getDate() - shift + weekOffset * 7);
+  const d = new Date(FIRST_MONDAY.getTime());
+  d.setDate(d.getDate() + weekOffset * 7);
   return d;
+}
+function inWindow(dateStr){
+  return dateStr >= BOOKING_OPENS && dateStr <= BOOKING_CLOSES;
 }
 function dateOf(weekOffset, dayOffset){
   const d = mondayOf(weekOffset);
@@ -454,6 +475,7 @@ function weekHasRoom(lang, week){
   const conf = SCHEDULE[lang] || {};
   return DAYS.some(day => {
     const dstr = iso(dateOf(week, day.offset));
+    if (!inWindow(dstr)) return false;
     return (conf[day.key] || []).some(range =>
       expand(range).some(t => !isPast(dstr, t) && !isFull(lang, dstr, t)));
   });
@@ -495,19 +517,21 @@ function renderBoard(){
   const mon = mondayOf(state.week), fri = dateOf(state.week,4);
   document.getElementById("weekLabel").textContent = `${pretty(mon)} – ${pretty(fri)}`;
   document.getElementById("weekSub").textContent =
-    state.week===0 ? "This week" : state.week===1 ? "Next week" : `In ${state.week} weeks`;
+    `Week ${state.week + 1} of ${WEEKS_AHEAD + 1} \u00b7 sign-ups close ${pretty(CLOSE_DATE)}`;
   document.getElementById("prevWeek").disabled = state.week === 0;
   document.getElementById("nextWeek").disabled = state.week >= WEEKS_AHEAD;
 
   const board = document.getElementById("board");
   board.innerHTML = "";
   const conf = SCHEDULE[state.lang] || {};
-  const openDays = DAYS.filter(d => (conf[d.key] || []).length);
+  const openDays = DAYS.filter(d =>
+    (conf[d.key] || []).length && inWindow(iso(dateOf(state.week, d.offset))));
 
   if (!openDays.length){
     board.className = "";
-    board.innerHTML = `<div class="empty"><strong>No office hours posted yet</strong>${
-      conf._note || "Please check back later."}</div>`;
+    board.innerHTML = `<div class="empty"><strong>Nothing open this week</strong>
+      ${state.lang} has no office hours inside the sign-up period this week.
+      Use the arrows to look at another week.</div>`;
     return;
   }
   board.className = "board";
