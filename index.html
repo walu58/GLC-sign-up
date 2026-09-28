@@ -345,8 +345,8 @@ const SCHEDULE = {
   Japanese: {
     mon: [],
     tue: [],
-    wed: [["15:00","21:00"]],
-    thu: [["10:00","18:00"]],
+    wed: [["15:00","16:00"]],
+    thu: [["10:00","14:00"],["17:00","18:00"]],   // 14:00-17:00 is not available
     fri: []
   }
 };
@@ -562,7 +562,7 @@ function renderBoard(){
         <p>Office hours for ${state.lang} have not been confirmed yet. They will
            appear on this page as soon as they are set, and you will be able to
            book them here.</p>
-        <p class="soon-foot">Should you have further inquiries
+        <p class="soon-foot">If your question cannot wait, write to
            <a href="mailto:glc@taejae.ac.kr">glc@taejae.ac.kr</a>.</p>
       </div>`;
     return;
