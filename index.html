@@ -112,6 +112,25 @@
     border-radius:var(--radius);padding:13px 16px;margin-bottom:18px;font-size:14px;color:#6B4508;
   }
   .notice strong{display:block;margin-bottom:2px}
+
+  /* a language whose hours are not confirmed yet */
+  .soon{
+    background:#fff;border:1px solid var(--violet-line);border-top:3px solid var(--teal);
+    border-radius:var(--radius);padding:32px 30px;max-width:560px;box-shadow:var(--shadow);
+  }
+  .soon-tag{
+    margin:0 0 12px;display:inline-block;padding:3px 11px;border-radius:999px;
+    background:var(--teal-soft);color:#0B7070;font-size:12.5px;font-weight:700;
+  }
+  .soon h2{margin:0 0 10px;font-size:20px;letter-spacing:-.01em}
+  .soon p{margin:0 0 12px;color:var(--muted);max-width:52ch}
+  .soon p:last-child{margin-bottom:0}
+  .soon-foot{font-size:13.5px}
+  .tab .dot{
+    display:inline-block;width:6px;height:6px;border-radius:50%;
+    background:var(--teal);margin-left:7px;vertical-align:middle;
+  }
+
   .empty{
     background:#fff;border:1px dashed var(--violet-line);border-radius:var(--radius);
     padding:34px 22px;text-align:center;color:var(--muted);
@@ -300,24 +319,28 @@ const BOOKING_OPENS  = "2026-10-06";
 const BOOKING_CLOSES = "2026-10-30";
 
 // Office hours. Add or remove ranges freely; an empty list = no hours that day.
+//
+// Two optional settings per language:
+//   comingSoon: true   — hides the calendar and shows an "opening soon" panel.
+//                        Use it while the instructor's hours are still being set.
+//   opensOn: "YYYY-MM-DD" — no bookings before this date, even inside the
+//                        sign-up period above.
 const SCHEDULE = {
   Korean: {
-    mon: [["10:00","12:00"],["14:00","20:00"]],
-    tue: [],
-    wed: [["10:00","12:00"],["14:00","15:00"]],
-    thu: [],
-    fri: [["19:00","21:00"]]
+    comingSoon: true,
+    mon: [], tue: [], wed: [], thu: [], fri: []
   },
   Russian: {
+    opensOn: "2026-10-08",
     mon: [],
-    tue: [["11:00","22:00"]],
+    tue: [],
     wed: [],
-    thu: [["11:00","17:00"]],
+    thu: [["11:00","12:00"],["13:00","16:00"]],
     fri: []
   },
   Chinese: {
-    mon: [], tue: [], wed: [], thu: [],
-    fri: [["09:00","12:00"]]
+    comingSoon: true,
+    mon: [], tue: [], wed: [], thu: [], fri: []
   },
   Japanese: {
     mon: [],
@@ -373,8 +396,13 @@ function mondayOf(weekOffset){
   d.setDate(d.getDate() + weekOffset * 7);
   return d;
 }
-function inWindow(dateStr){
-  return dateStr >= BOOKING_OPENS && dateStr <= BOOKING_CLOSES;
+function inWindow(dateStr, lang){
+  if (dateStr < BOOKING_OPENS || dateStr > BOOKING_CLOSES) return false;
+  const from = lang && SCHEDULE[lang] && SCHEDULE[lang].opensOn;
+  return from ? dateStr >= from : true;
+}
+function isComingSoon(lang){
+  return !!(SCHEDULE[lang] && SCHEDULE[lang].comingSoon);
 }
 function dateOf(weekOffset, dayOffset){
   const d = mondayOf(weekOffset);
@@ -472,10 +500,11 @@ function isFull(lang, date, time){
 /* Slots in the current week are often already in the past, which makes the
    board look fully closed. Jump to the first week that still has room. */
 function weekHasRoom(lang, week){
+  if (isComingSoon(lang)) return false;
   const conf = SCHEDULE[lang] || {};
   return DAYS.some(day => {
     const dstr = iso(dateOf(week, day.offset));
-    if (!inWindow(dstr)) return false;
+    if (!inWindow(dstr, lang)) return false;
     return (conf[day.key] || []).some(range =>
       expand(range).some(t => !isPast(dstr, t) && !isFull(lang, dstr, t)));
   });
@@ -495,6 +524,10 @@ function buildTabs(){
     b.type = "button";
     b.role = "tab";
     b.textContent = l;
+    if (isComingSoon(l)){
+      b.insertAdjacentHTML("beforeend", `<span class="dot" title="Times to be announced"></span>`);
+      b.setAttribute("aria-label", l + " — times to be announced");
+    }
     b.setAttribute("aria-selected", state.view==="book" && state.lang===l);
     b.onclick = () => {
       state.lang = l; state.view = "book";
@@ -514,23 +547,47 @@ function buildTabs(){
 
 /* ---------- booking board ---------- */
 function renderBoard(){
+  const board = document.getElementById("board");
+  const weekbar = document.querySelector(".weekbar");
+  board.innerHTML = "";
+
+  /* A language whose hours are not settled yet: no calendar, just a panel. */
+  if (isComingSoon(state.lang)){
+    weekbar.classList.add("hidden");
+    board.className = "";
+    board.innerHTML = `
+      <div class="soon">
+        <p class="soon-tag">Opening soon</p>
+        <h2>${state.lang} meeting times are being scheduled</h2>
+        <p>Office hours for ${state.lang} have not been confirmed yet. They will
+           appear on this page as soon as they are set, and you will be able to
+           book them here.</p>
+        <p class="soon-foot">If your question cannot wait, write to
+           <a href="mailto:glc@taejae.ac.kr">glc@taejae.ac.kr</a>.</p>
+      </div>`;
+    return;
+  }
+
+  weekbar.classList.remove("hidden");
   const mon = mondayOf(state.week), fri = dateOf(state.week,4);
-  document.getElementById("weekLabel").textContent = `${pretty(mon)} – ${pretty(fri)}`;
+  document.getElementById("weekLabel").textContent = `${pretty(mon)} \u2013 ${pretty(fri)}`;
   document.getElementById("weekSub").textContent =
     `Week ${state.week + 1} of ${WEEKS_AHEAD + 1} \u00b7 sign-ups close ${pretty(CLOSE_DATE)}`;
   document.getElementById("prevWeek").disabled = state.week === 0;
   document.getElementById("nextWeek").disabled = state.week >= WEEKS_AHEAD;
 
-  const board = document.getElementById("board");
-  board.innerHTML = "";
   const conf = SCHEDULE[state.lang] || {};
   const openDays = DAYS.filter(d =>
-    (conf[d.key] || []).length && inWindow(iso(dateOf(state.week, d.offset))));
+    (conf[d.key] || []).length && inWindow(iso(dateOf(state.week, d.offset)), state.lang));
 
   if (!openDays.length){
     board.className = "";
+    const from = conf.opensOn;
+    const early = from && iso(dateOf(state.week, 4)) < from;
     board.innerHTML = `<div class="empty"><strong>Nothing open this week</strong>
-      ${state.lang} has no office hours inside the sign-up period this week.
+      ${early
+        ? `${state.lang} meetings start on ${longDate(new Date(from + "T00:00:00"))}.`
+        : `${state.lang} has no office hours inside the sign-up period this week.`}
       Use the arrows to look at another week.</div>`;
     return;
   }
@@ -770,6 +827,9 @@ document.getElementById("csv").onclick = downloadCSV;
 document.getElementById("refresh").onclick = async () => { await loadBookings(); renderAdmin(); toast("Refreshed."); };
 
 loadBookings().then(() => {
+  // Open on a language students can actually book, not one that is still pending.
+  const bookable = LANGS.filter(l => !isComingSoon(l));
+  state.lang = bookable.find(l => weekHasRoom(l, firstOpenWeek(l))) || bookable[0] || LANGS[0];
   state.week = firstOpenWeek(state.lang);
   render();
 });
