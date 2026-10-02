@@ -323,12 +323,18 @@ const BOOKING_CLOSES = "2026-10-30";
 // Two optional settings per language:
 //   comingSoon: true   — hides the calendar and shows an "opening soon" panel.
 //                        Use it while the instructor's hours are still being set.
-//   opensOn: "YYYY-MM-DD" — no bookings before this date, even inside the
+//   opensOn: "YYYY-MM-DD"  — no bookings before this date, even inside the
 //                        sign-up period above.
+//   closesOn: "YYYY-MM-DD" — and none after it.
 const SCHEDULE = {
   Korean: {
-    comingSoon: true,
-    mon: [], tue: [], wed: [], thu: [], fri: []
+    opensOn:  "2026-10-19",
+    closesOn: "2026-10-30",
+    mon: [],
+    tue: [],
+    wed: [["11:00","12:00"],["13:00","15:00"]],
+    thu: [],
+    fri: [["19:00","21:00"]]
   },
   Russian: {
     opensOn: "2026-10-08",
@@ -398,8 +404,10 @@ function mondayOf(weekOffset){
 }
 function inWindow(dateStr, lang){
   if (dateStr < BOOKING_OPENS || dateStr > BOOKING_CLOSES) return false;
-  const from = lang && SCHEDULE[lang] && SCHEDULE[lang].opensOn;
-  return from ? dateStr >= from : true;
+  const conf = (lang && SCHEDULE[lang]) || {};
+  if (conf.opensOn  && dateStr < conf.opensOn)  return false;
+  if (conf.closesOn && dateStr > conf.closesOn) return false;
+  return true;
 }
 function isComingSoon(lang){
   return !!(SCHEDULE[lang] && SCHEDULE[lang].comingSoon);
@@ -562,7 +570,7 @@ function renderBoard(){
         <p>Office hours for ${state.lang} have not been confirmed yet. They will
            appear on this page as soon as they are set, and you will be able to
            book them here.</p>
-        <p class="soon-foot"> Should you have further inquiries,please contact to
+        <p class="soon-foot">If your question cannot wait, write to
            <a href="mailto:glc@taejae.ac.kr">glc@taejae.ac.kr</a>.</p>
       </div>`;
     return;
