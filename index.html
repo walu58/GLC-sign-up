@@ -112,6 +112,13 @@
     border-radius:var(--radius);padding:13px 16px;margin-bottom:18px;font-size:14px;color:#6B4508;
   }
   .notice strong{display:block;margin-bottom:2px}
+  .notice code{background:#F6E9CE;padding:1px 5px;border-radius:4px;font-size:12.5px}
+  .notice a{color:#8A5A0B}
+  .link-btn{
+    display:inline-block;margin-left:2px;padding:0;border:0;background:none;
+    color:#8A5A0B;font-size:inherit;font-weight:600;text-decoration:underline;cursor:pointer;
+  }
+  .link-btn:disabled{opacity:.5;cursor:default}
 
   /* a language whose hours are not confirmed yet */
   .soon{
@@ -205,7 +212,7 @@
   <div class="wrap">
     <p class="brand">Taejae University · Global Language Center</p>
     <h1>Global Language Center — Meeting Sign-up</h1>
-    <p class="lede">Book a 20-minute meeting with a language instructor. Choose a language, pick an open time, and tell us briefly what you would like to discuss. Meetings run from <strong>6 October</strong> to <strong>30 October 2026</strong>.</p>
+    <p class="lede">Book a 20-minute meeting with a language instructor. Choose a language, pick an open time, and tell us briefly what you would like to discuss. Meetings run from <strong>7 December</strong> to <strong>28 December 2026</strong>.</p>
   </div>
 </header>
 
@@ -315,8 +322,8 @@ const SLOT_MINUTES = 20;
 const SLOT_CAPACITY = 1;
 
 // The period students may book. Dates outside it are not shown at all.
-const BOOKING_OPENS  = "2026-10-06";
-const BOOKING_CLOSES = "2026-10-30";
+const BOOKING_OPENS  = "2026-12-07";
+const BOOKING_CLOSES = "2026-12-28";
 
 // Office hours. Add or remove ranges freely; an empty list = no hours that day.
 //
@@ -328,8 +335,6 @@ const BOOKING_CLOSES = "2026-10-30";
 //   closesOn: "YYYY-MM-DD" — and none after it.
 const SCHEDULE = {
   Korean: {
-    opensOn:  "2026-10-19",
-    closesOn: "2026-10-30",
     mon: [],
     tue: [],
     wed: [["11:00","12:00"],["13:00","15:00"]],
@@ -337,7 +342,6 @@ const SCHEDULE = {
     fri: [["19:00","21:00"]]
   },
   Russian: {
-    opensOn: "2026-10-08",
     mon: [],
     tue: [],
     wed: [],
@@ -345,8 +349,6 @@ const SCHEDULE = {
     fri: []
   },
   Chinese: {
-    opensOn:  "2026-10-14",
-    closesOn: "2026-10-30",
     mon: [],
     tue: [],
     wed: [["14:00","17:00"]],
@@ -446,7 +448,18 @@ function expand(range){
    answers every request with a redirect. A plain fetch() often fails that
    trip. JSONP (loading the answer as a script tag) is not affected by
    either problem, so every call goes through here. */
-function api(params, timeout){
+/* Apps Script sleeps between visits and its first answer of the day can take
+   a while, so a single slow reply is retried once before giving up. */
+async function api(params, timeout){
+  try {
+    return await call(params, timeout || 25000);
+  } catch (e) {
+    if (/in time|reach/i.test(e.message)) return await call(params, 25000);
+    throw e;
+  }
+}
+
+function call(params, timeout){
   return new Promise((resolve, reject) => {
     if (!API_URL) return reject(new Error("not configured"));
     const cb = "glc_cb_" + Math.random().toString(36).slice(2,9);
@@ -455,7 +468,7 @@ function api(params, timeout){
     const done = () => { settled = true; clearTimeout(timer); delete window[cb]; tag.remove(); };
     const timer = setTimeout(() => {
       if (!settled){ done(); reject(new Error("The sign-up sheet did not answer in time.")); }
-    }, timeout || 20000);
+    }, timeout);
 
     window[cb] = data => {
       if (settled) return;
@@ -500,7 +513,44 @@ function showConnectionBanner(){
   }
   bar.innerHTML = `<strong>Sign-ups are not being saved right now.</strong>
     The page cannot reach the booking sheet, so anything you enter will be lost.
-    Please contact the Global Language Center.`;
+    Please contact the Global Language Center.
+    <button type="button" id="diagBtn" class="link-btn">Run a connection check</button>
+    <span id="diagOut"></span>`;
+  document.getElementById("diagBtn").onclick = runDiagnosis;
+}
+
+/* Turns "it doesn't work" into the one step that is actually broken. */
+async function runDiagnosis(){
+  const out = document.getElementById("diagOut");
+  const btn = document.getElementById("diagBtn");
+  btn.disabled = true;
+  out.innerHTML = `<br>Checking…`;
+
+  if (!API_URL){
+    out.innerHTML = `<br><b>No sign-up sheet is connected.</b>
+      Set API_URL at the top of index.html to the Apps Script web app address.`;
+    btn.disabled = false; return;
+  }
+  try {
+    const r = await api({action:"ping"}, 30000);
+    out.innerHTML = `<br><b>The sheet answered.</b> It holds ${r.rows} sign-up(s).
+      Reload the page and booking should work.`;
+    state.online = true;
+    await loadBookings();
+    render();
+    return;
+  } catch (e) {
+    out.innerHTML = `<br><b>No answer from the sheet.</b> (${esc(e.message)})
+      <br>Check these three, in order:
+      <br>1. Open <a href="${esc(API_URL)}?action=ping" target="_blank" rel="noopener">this address</a>.
+         It should show <code>{"ok":true,…}</code>. A sign-in page or an error means
+         the deployment is not public.
+      <br>2. In Apps Script, set <b>Deploy &rsaquo; Manage deployments</b> to
+         <b>Execute as: Me</b> and <b>Who has access: Anyone</b>.
+      <br>3. After editing Code.gs, deploy a <b>New version</b> — saving alone
+         does not publish the change.`;
+  }
+  btn.disabled = false;
 }
 
 function seatsUsed(lang, date, time){
